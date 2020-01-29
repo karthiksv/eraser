@@ -153,7 +153,7 @@ session in a new shell.
   3. Generate binaries for testcases in bin folder:
 
      ```
-     cd testcases/bin && make src_dir=$ERASER_HOME/testcases/src	
+     cd $ERASER_HOME/testcases/bin && make src_dir=$ERASER_HOME/testcases/src	
      ```
 
      If compilation fails, ensure that you have installed the rocket-tools
