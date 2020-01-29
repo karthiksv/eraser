@@ -11,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#!/usr/bin/env bash
-
 JAVA=/usr/bin/java
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cmd="$JAVA -Xmx4G -jar $DIR/vcdstats.jar ${*:1}"
