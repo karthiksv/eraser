@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-use List::Util qw( min max );
-
-use List::Util qw(sum max min);
-use List::MoreUtils qw(uniq);
+use List::Util qw(sum max min );
+use List::MoreUtils qw(uniq pairwise);
 use Getopt::Std;
 use IO::File;
 use strict;
-use warnings;
+#use warnings;
 use Cwd 'abs_path';
 
 #Check if env variable is set
@@ -32,6 +30,7 @@ if ($#ARGV != 2 ) { die "Syntax: perl gen_latch_macro_ranking_riscv.pl <INPUT_DI
 
 my $PARSE_VCDSTATS=1;
 my $GEN_MACRO_HASH=1;
+my $BASELINE_INSTS=0;
 
 my $INPUT_DIR = $ARGV[0];
 my $OUTPUT_DIR = $ARGV[1];
@@ -40,35 +39,47 @@ my $RESIDENCY_THRESHOLD = $ARGV[2];
 my $macro_datafile;
 my $tmp_swlist;
 my $tmp_reslist;
+my $tmp_macrolist;
 
 my $max_macro_cov;
 my $max_macro_sw;
 my $max_macro_res;
 
 my @macro_list;
+my @max_macro_list;
 my @bit_list;
 my @sw_list;
+my @max_sw_list;
+my @wted_macro_list;
 my @res_list;
+my @max_res_list;
 my @thresholded_hash;
+my @inst_array;
 
 my %macro_coverage_hash;
 my %macro_switching_hash;
+my %wted_macro_hash;
 my %macro_residency_hash;
+my %max_macro_coverage_hash;
+my %max_macro_switching_hash;
+my %max_macro_residency_hash;
 
 my $CONFIG_DIR=$ENV{'SERMINER_CONFIG_HOME'};
 my $MACRO_PERINST_OUTPUT="$OUTPUT_DIR/res_th_$RESIDENCY_THRESHOLD";
 system("mkdir -p $MACRO_PERINST_OUTPUT");
 
+my $MAX_FNAME="/tmp/max_sw_file.txt";
 my $macro_cov_file="$MACRO_PERINST_OUTPUT/macro_perinst_coverage_th${RESIDENCY_THRESHOLD}.txt";
 my $macro_sw_file="$MACRO_PERINST_OUTPUT/macro_perinst_switching_th${RESIDENCY_THRESHOLD}.txt";
+my $wted_macro_file="$MACRO_PERINST_OUTPUT/wted_macro_th${RESIDENCY_THRESHOLD}.txt";
 my $macro_res_file="$MACRO_PERINST_OUTPUT/macro_perinst_residency_th${RESIDENCY_THRESHOLD}.txt";
-my $macro_inst_list="$CONFIG_DIR/inst_list.txt";
 
 my $inst;
 my $fctr=0;
 
 system("rm -f $macro_cov_file");
 system("rm -f $macro_sw_file");
+system("rm -f $wted_macro_file");
 system("rm -f $macro_res_file");
 
 #Obtain macro and latch names
@@ -78,10 +89,8 @@ system("rm -f $macro_res_file");
 
 if ($PARSE_VCDSTATS)
 {
-
 	print ("Parsing VCD Stats\n");
 	#Create instruction list
-	#system("rm -f $macro_inst_list");
 
 	foreach my $fname (`ls -v $INPUT_DIR/*.stats`)
 	{
@@ -92,6 +101,11 @@ if ($PARSE_VCDSTATS)
 		system("\${SERMINER_HOME}/src/parse_vcdstats.sh $fname $inst $OUTPUT_DIR");
 		#system("echo $inst >> $macro_inst_list");
 	}
+	if ($BASELINE_INSTS)	#Run only for baseline testcases
+	{
+		print "\${SERMINER_HOME}/src/create_max_sw_file.sh $OUTPUT_DIR > $MAX_FNAME\n";
+		system("\${SERMINER_HOME}/src/create_max_sw_file.sh $OUTPUT_DIR > $MAX_FNAME");
+	}
 }
 
 if ($GEN_MACRO_HASH)
@@ -99,10 +113,14 @@ if ($GEN_MACRO_HASH)
 	print "Gen macro hash\n";
 	foreach my $mname (`ls -v $OUTPUT_DIR/*macro_data.txt`)
 	{
+		chomp($mname);
+		$inst = `basename $mname | awk -F '.macro_data' '{print \$1}'`; chomp($inst);
+		$inst_array[$fctr]=$inst;
 		if ($fctr==0)
 		{
 			my $tmp_macrolist = `awk '{ if (NR>1) print \$1}' $mname`; @macro_list = split(/\n/, $tmp_macrolist);
 			my $tmp_bitlist = `awk '{ if (NR>1) print \$3}' $mname`; @bit_list = split(/\n/, $tmp_bitlist);
+			@wted_macro_list = map { $_/sum(@bit_list) } @bit_list;
 		}
 		
 		$tmp_swlist = `awk '{ if (NR>1) print \$(NF-1)}' $mname`; @sw_list = split(/\n/, $tmp_swlist);
@@ -113,46 +131,106 @@ if ($GEN_MACRO_HASH)
 			#print("$macro_list[$i]: $bit_list[$i] $sw_list[$i]\n");
 			if ($sw_list[$i])
 			{
-				#$macro_coverage_hash{$macro_list[$i]}[$fctr] = $sw_list[$i]?($sw_list[$i]>0?1:0):0; 
 				$macro_coverage_hash{$macro_list[$i]}[$fctr] = $sw_list[$i]>0?1:0; 
 				$macro_switching_hash{$macro_list[$i]}[$fctr] = $sw_list[$i];
 				$macro_residency_hash{$macro_list[$i]}[$fctr] = $res_list[$i];
+				if ($fctr==0)
+				{
+					$wted_macro_hash{$macro_list[$i]} = $wted_macro_list[$i];
+				}
 			}
 		}	
 		$fctr++;
 	}
 
+	#Karthik -- determine max switching from evaluated Max SW file
+	$tmp_macrolist = `awk '{ if (NR>1 && NF>1) print \$1}' $MAX_FNAME`; @max_macro_list = split(/\n/, $tmp_macrolist); chomp(@max_macro_list);
+	$tmp_swlist = `awk '{ if (NR>1 && NF>1) print \$(NF-1)}' $MAX_FNAME`; @max_sw_list = split(/\n/, $tmp_swlist); chomp(@max_sw_list);
+	$tmp_reslist = `awk '{ if (NR>1 && NF>1) print \$(NF)}' $MAX_FNAME`; @max_res_list = split(/\n/, $tmp_reslist); chomp(@max_res_list);
+	for (my $i=0; $i<=$#max_macro_list; $i++)
+	{
+		if ($sw_list[$i])
+		{
+			$max_macro_coverage_hash{$max_macro_list[$i]} = $max_sw_list[$i]>0?1:0; 
+			$max_macro_switching_hash{$max_macro_list[$i]} = $max_sw_list[$i];
+			$max_macro_residency_hash{$max_macro_list[$i]} = $max_res_list[$i];
+		}
+	}	
+	
 	#	for (my $i=0;$i<=$#macro_list; $i++)
 	#	{
 	#		print("$macro_list[$i]: $bit_list[$i] $sw_list[$i]\n");
 	#	}
 
+	open(my $cov, ">", $macro_cov_file);
+	print $cov "#MACRO @inst_array\n";
 	foreach my $key (keys %macro_coverage_hash)
 	{
-		#$max_macro_cov = max @{$macro_coverage_hash{$key}};
-		$max_macro_res = max @{$macro_residency_hash{$key}};
-		#@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_cov)?$_:0} @{$macro_coverage_hash{$key}};
-		@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_res)?1:0} @{$macro_residency_hash{$key}};
+		#Karthik
+		$max_macro_sw =  $max_macro_switching_hash{$key};
+
+		if ($RESIDENCY_THRESHOLD >0)
+		{
+			@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_sw)?1:0} @{$macro_switching_hash{$key}};
+		}
+		else 
+		{
+			@thresholded_hash = @{$macro_coverage_hash{$key}};
+		}
 		#print("$key, $max_macro_cov, @{$macro_coverage_hash{$key}}\n");
 		#print("$key, @thresholded_hash\n ");
 		system("echo $key @thresholded_hash >> $macro_cov_file");
 	}
+	close($cov);
 
-	foreach my $key (keys %macro_switching_hash)
+	open(my $sw, ">", $macro_sw_file);
+	print $sw "#MACRO @inst_array\n";
+	foreach my $key (keys %macro_coverage_hash)		# use same hash keys so as to print in same order in all files
 	{
-		$max_macro_sw = max @{$macro_switching_hash{$key}};
-		@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_sw)?$_:0} @{$macro_switching_hash{$key}};
+		#$max_macro_sw = max @{$macro_switching_hash{$key}};
+		my $tmp_max = max @{$macro_switching_hash{$key}};
+		#Karthik
+		$max_macro_sw =  $max_macro_switching_hash{$key};
+		#print "$key $max_macro_sw $tmp_max\n";
+		if ($RESIDENCY_THRESHOLD >0)
+		{
+			@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_sw)?$_:0} @{$macro_switching_hash{$key}};
+		}
+		else 
+		{
+			@thresholded_hash = @{$macro_switching_hash{$key}};
+		}
+		#@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_sw)?$_:0} @{$macro_switching_hash{$key}};
 		#print("$key,$max_macro_sw @{$macro_switching_hash{$key}}\n");
 		#print("$key, @thresholded_hash\n ");
 		system("echo $key @thresholded_hash >> $macro_sw_file");
 	}
-	foreach my $key (keys %macro_residency_hash)
+	close($sw);
+
+	foreach my $key (keys %macro_coverage_hash)
 	{
-		$max_macro_res = max @{$macro_residency_hash{$key}};
-		@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_res)?$_:0} @{$macro_residency_hash{$key}};
+		system("echo $key $wted_macro_hash{$key} >> $wted_macro_file");
+	}
+
+	open(my $res, ">", $macro_res_file);
+	print $res "#MACRO @inst_array\n";
+	foreach my $key (keys %macro_coverage_hash)
+	{
+		#$max_macro_res = max @{$macro_residency_hash{$key}};
+		$max_macro_res = $max_macro_residency_hash{$key};
+		if ($RESIDENCY_THRESHOLD >0)
+		{
+			@thresholded_hash = map {($_ >= $RESIDENCY_THRESHOLD*$max_macro_res)?$_:0} @{$macro_residency_hash{$key}};
+		}
+		else 
+		{
+			@thresholded_hash = @{$macro_residency_hash{$key}};
+		}
 		#print("$key,$max_macro_res @{$macro_residency_hash{$key}}\n");
 		system(" echo $key @thresholded_hash >> $macro_res_file");
 	}
+	close($res);
+
 	#Copy over instruction list to res_th folder
 	system("cp $CONFIG_DIR/inst_list.txt $MACRO_PERINST_OUTPUT/.");
 }

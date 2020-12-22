@@ -14,7 +14,7 @@
 
 # Script to run all single instruction testcases
 
-DD=0
+DD=$1
 LS=10000
 OUT_DIR=$(pwd)/src
 
@@ -24,6 +24,7 @@ inst_str=""
 
 # shellcheck disable=SC2013
 for INST in $(cat "$SERMINER_CONFIG_HOME/inst_list.txt");      
+#for INST in BEQ_V0 #BGE_V0 BGEU_V0 BLT_V0 BLTU_V0 BNE_V0 JAL_V0     
 do
     inst_str="$inst_str $INST"
 done
@@ -31,4 +32,6 @@ done
 cd "$MICROPROBE_HOME/targets/riscv/examples" || exit
 echo "$start_str $inst_str $end_str"
 run_cmd="$start_str $inst_str $end_str"
+sleep 3
+echo "Generated testcases!!"
 ${run_cmd}

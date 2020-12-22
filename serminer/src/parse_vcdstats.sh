@@ -31,23 +31,23 @@ if ($1~/./)
         S=$1;
     }
     if( $2~/:/) 
-        {
-            split($2,a,":"); 
-            sig_bits[S] = sig_bits[S] + int(a[1])
-            numbits = int(a[1])
-        } else 
-        {
-            sig_bits[S]++;
-            numbits=1
-        };
-        num_signals[S]++; 
-        sig_name[S] = S; 
-        tot_sw[S] += $NF*numbits; 
-        tot_res[S] += ($NF==0)?0:numbits/$NF; tot_bits[S] +=numbits;
-    }
+    {
+        split($2,a,":"); 
+        sig_bits[S] = sig_bits[S] + int(a[1])+1
+        numbits = int(a[1])
+    } else 
+    {
+        sig_bits[S]++;
+        numbits=1
+    };
+    num_signals[S]++; 
+    sig_name[S] = S; 
+    tot_sw[S] += $NF*numbits; 
+    tot_res[S] += ($NF==0)?0:numbits/$NF; tot_bits[S] +=numbits;
+}
 END {
-print "#Name Num_signals Num_bits Total_sw Avg_residency" 
-for (sig in sig_name) print sig " " num_signals[sig] " " sig_bits[sig] " " tot_sw[sig] " " tot_res[sig]/(tot_bits[sig])
+    print "#Name Num_signals Num_bits Total_sw Avg_residency" 
+    for (sig in sig_name) print sig " " num_signals[sig] " " sig_bits[sig] " " tot_sw[sig]/(tot_bits[sig]) " " tot_res[sig]/(tot_bits[sig])
 }' > "$LATCH_DATAFILE"
 
 # aggregated_signal_list=('io_rocc' 'io_fpu' 'io_dmem' 'mem_reg' 'mem_int' 'll' 'id_' 'ex_rs' 'ex_op' 'ex_cause' 'ex_reg' 'div_io' 'csr_io' 'bypass_mux' 'alu_io' 'io_imem' 'io_dmem' 'io_ptw' 'wb_reg' 'PlusArgTimeout' 'ibuf_io' 'ex_imm')
@@ -66,14 +66,15 @@ if (NR==1) next;
         }
         numsigs[macro]+=$(NF-3); 
         numbits[macro]+=$(NF-2); 
-        tot_sw[macro]+=$(NF-1);
-        tot_res[macro]=$NF
+        tot_sw[macro]+=$(NF-1)*$(NF-2);
+        tot_res[macro]+=$NF
     } 
 END {
 print "#Name Num_signals Num_bits Total_sw Avg_residency" 
 for (i in numsigs) 
     {
         avg_res = (numbits[i]==0)?0:tot_res[i]/numbits[i]; 
-        print i " " numsigs[i] " " numbits[i] " " tot_sw[i] " " avg_res
+        avg_sw = (numbits[i]==0)?0:tot_sw[i]/numbits[i]; 
+        print i " " numsigs[i] " " numbits[i] " " avg_sw " " avg_res
     }
 }' "$LATCH_DATAFILE" > "$MACRO_DATAFILE"

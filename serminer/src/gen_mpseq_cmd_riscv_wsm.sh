@@ -14,7 +14,9 @@
 
 set -e
 
+RUN=1
 DEBUG=1
+WEIGHTED=1
 
 #Set Python version
 PYTHON="python3"
@@ -23,21 +25,18 @@ if [ "$#" -lt 6 ]; then
     exit 1
 fi
 
-STRESSMARK_TYPE=$1
-SERMINER_OUTPUT_DIR=$2
-STRESSMARK_OUT_DIR=$3
-RES_THRESHOLD=$4
-NUM_PERMUTATIONS=$5
-DEP_DISTANCE=$6
-INST_FRACTION=$7
+SERMINER_OUTPUT_DIR=$1
+STRESSMARK_OUT_DIR=$2
+RES_THRESHOLD=$3
+NUM_PERMUTATIONS=$4
+DEP_DISTANCE=$5
+WORKLOAD_INST_LIST=$6
 
 if [ x${INST_FRACTION}x = "xx" ]
 then
 	INST_FRACTION=0.99
 	echo "Setting default inst fraction"
 fi
-
-WEIGHTED=1
 
 # Check if results directory exists
 if [ -d "$SERMINER_OUTPUT_DIR" ] && [ -e "${SERMINER_CONFIG_HOME}/inst_list.txt" ]
@@ -52,6 +51,8 @@ else
 fi
 
 NUM_INSTS=$(wc -l "${SERMINER_CONFIG_HOME}/inst_list.txt" | awk '{print $1}')
+BMNAME=`basename ${WORKLOAD_INST_LIST%_inst_list*}`
+echo $BMNAME
 
 # Create STRESSMARK_OUT_DIR 
 mkdir -p "$STRESSMARK_OUT_DIR"
@@ -61,37 +62,24 @@ then
     echo "Dictionary size = $NUM_INSTS"
 fi
 
-
 if [ $DEBUG -eq 1 ]
 then
-    if [ $STRESSMARK_TYPE -eq 0 ]
-    then
-    	echo "$PYTHON $SERMINER_HOME/src/gen_ser_stressmark_riscv.py -o $SERMINER_OUTPUT_DIR -n $NUM_INSTS -th $RES_THRESHOLD -p 0 | tail -n 1 "
-    else
-    	echo "$PYTHON $SERMINER_HOME/src/gen_aging_stressmark_riscv.py -o $SERMINER_OUTPUT_DIR -n $NUM_INSTS -th $RES_THRESHOLD -p 0 -t wted_sw -if $INST_FRACTION | tail -n 1 "
-    fi
+    echo "$PYTHON $SERMINER_HOME/src/gen_aging_stressmark_riscv.py -o $SERMINER_OUTPUT_DIR -n $NUM_INSTS -th $RES_THRESHOLD -p 0 -t wted_sw -il $WORKLOAD_INST_LIST | tail -n 1 "
 fi
 
-if [ $STRESSMARK_TYPE -eq 0 ]
+if [ $RUN -eq 1 ]
 then
-	stressmark_insts_list=( $($PYTHON "$SERMINER_HOME/src/gen_ser_stressmark_riscv.py" -o "$SERMINER_OUTPUT_DIR" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 0 | tail -n 1 ) )
-else
-	stressmark_insts_list=( $($PYTHON "$SERMINER_HOME/src/gen_aging_stressmark_riscv.py" -o "$SERMINER_OUTPUT_DIR" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 0 -t wted_sw -if "$INST_FRACTION" | tail -n 1 ) )
+	stressmark_insts_list=( $($PYTHON "$SERMINER_HOME/src/gen_aging_stressmark_riscv.py" -o "$SERMINER_OUTPUT_DIR" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 0 -t wted_sw -il "$WORKLOAD_INST_LIST" | tail -n 1 ) )
 fi
 
 if [ $DEBUG -eq 1 ]
 then
-    echo "Insts list: ${stressmark_insts_list[*]}"
+    echo "Insts list: $stressmark_insts_list"
 fi
 
 if  [ $WEIGHTED -eq 1 ]
 then
-    if [ $STRESSMARK_TYPE -eq 0 ]
-    then
-    	inst_weights=( $($PYTHON "$SERMINER_HOME/src/gen_ser_stressmark_riscv.py" -o "${SERMINER_OUTPUT_DIR}" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 1| tail -n 1 ) )
-    else
-    	inst_weights=( $($PYTHON "$SERMINER_HOME/src/gen_aging_stressmark_riscv.py" -o "${SERMINER_OUTPUT_DIR}" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 1 -t wted_sw -if "$INST_FRACTION" | tail -n 1 ) )
-    fi
+    inst_weights=( $($PYTHON "$SERMINER_HOME/src/gen_aging_stressmark_riscv.py" -o "${SERMINER_OUTPUT_DIR}" -n "$NUM_INSTS" -th "$RES_THRESHOLD" -p 1 -t wted_sw -if "$INST_FRACTION"  -il "$WORKLOAD_INST_LIST" | tail -n 1 ) )
 else
     for (( i=0; i<${#stressmark_insts_list[@]}; i++ ))
     do
@@ -100,6 +88,7 @@ else
 fi
 
 k=0
+
 for (( i=0; i<${#stressmark_insts_list[@]}; i++ ))
 do
     echo "W: ${inst_weights[$i]}"
@@ -114,4 +103,4 @@ num_insts=${#weighted_stressmark_insts_list[@]}
 echo "Inst weights: ${inst_weights[0]} ${inst_weights[1]}"
 echo "Weighted insts: ${weighted_stressmark_insts_list[*]}"
 
-echo "python $MICROPROBE_HOME/targets/riscv/examples/riscv_ipc_seq.py --dependency-distances $DEP_DISTANCE --loop-size 10000 --instructions ${weighted_stressmark_insts_list[*]} --output-dir $STRESSMARK_OUT_DIR --num_permutations $NUM_PERMUTATIONS --microbenchmark_name SM_TH_${RES_THRESHOLD}"
+echo "python $MICROPROBE_HOME/targets/riscv/examples/riscv_ipc_seq.py --dependency-distances $DEP_DISTANCE --loop-size 10000 --instructions ${weighted_stressmark_insts_list[*]} --output-dir $STRESSMARK_OUT_DIR --num_permutations $NUM_PERMUTATIONS --microbenchmark_name SM_${BMNAME}_TH_${RES_THRESHOLD}"

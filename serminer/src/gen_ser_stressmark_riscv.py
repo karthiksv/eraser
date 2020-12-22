@@ -40,10 +40,10 @@ def get_stressmark_inst_res(cov_list, res_list, inst_index, tot_cov_list, tot_re
     max_res = max(tot_res_list.values())
     #if VERBOSE:
     #	print(tot_sw_list.values())
-    #Find list of instructions with max switching
+    #Find list of instructions with max residency
     max_res_list = [inst for inst,val in tot_res_list.items() if val==max_res]
 
-    #Check which insts with max switching have highest coverwge - use 1st inst in case of tie
+    #Check which insts with max residency have highest coverwge - use 1st inst in case of tie
     max_cov = max([tot_cov_list[inst] for inst in max_res_list])
     tmp_list=dict(zip(max_res_list,[tot_cov_list[inst] for inst in max_res_list]))
     #max_cov_list = [inst for inst,val in tot_cov_list.items() if val==max_cov]
@@ -121,7 +121,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output_dir", type=str, help="Output dir", required=True)
     parser.add_argument("-n", "--num_insts", type=int, help="Number of input instructions", required=True)
-    parser.add_argument("-t", "--stressmark_type", type=str, help="Type of stressmark (coverage/switching/residency based)", required=False, default="res")
+    #parser.add_argument("-t", "--stressmark_type", type=str, help="Type of stressmark (coverage/switching/residency based)", required=False, default="res")
     parser.add_argument("-th", "--res_threshold", type=str, help="Residency Threshold", required=True)
     parser.add_argument("-p", "--print_val", type=int, help="Print insts (0) / Print weights (1)", required=True)
 
@@ -131,8 +131,8 @@ def main():
     args = parser.parse_args()
     OUTPUT_DIR = args.output_dir
     NUM_INSTS = args.num_insts  
-    if (args.stressmark_type):
-        stressmk_type = args.stressmark_type  
+    #if (args.stressmark_type):
+    #    stressmk_type = args.stressmark_type  
     res_threshold = args.res_threshold
     if (args.print_val):
         PRINT_WEIGHTS = 1
@@ -220,16 +220,17 @@ def main():
     #Recursive function to get list of instructions in stressmark
     stressmark_inst_list=[]
     #get_stressmark_inst( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, stressmark_inst_list)    
-    if (stressmk_type == "cov"):
-        print ("Generating Coverage stressmark")
-        get_stressmark_inst_cov( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, stressmark_inst_list)    
-    elif (stressmk_type == "sw"):
-        get_stressmark_inst_sw( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, stressmark_inst_list)    
-    elif (stressmk_type == "sw_ex"):
-        get_stressmark_inst_sw_exclude( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, EXCLUDED_INST_LIST, stressmark_inst_list)    
-    elif (stressmk_type == "res"):	# Default option for any core with no clock gating
-        get_stressmark_inst_res( pruned_cov_dict, pruned_res_dict, inst_index_dict, inst_macro_dict, inst_macro_res_dict, stressmark_inst_list)    
-    
+    #if (stressmk_type == "cov"):
+    #    print ("Generating Coverage stressmark")
+    #    get_stressmark_inst_cov( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, stressmark_inst_list)    
+    #elif (stressmk_type == "sw"):
+    #    get_stressmark_inst_sw( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, stressmark_inst_list)    
+    #elif (stressmk_type == "sw_ex"):
+    #    get_stressmark_inst_sw_exclude( pruned_cov_dict, pruned_sw_dict, inst_index_dict, inst_macro_dict, inst_macro_sw_dict, EXCLUDED_INST_LIST, stressmark_inst_list)    
+    #elif (stressmk_type == "res"):	# Default option for any core with no clock gating
+    #    get_stressmark_inst_res( pruned_cov_dict, pruned_res_dict, inst_index_dict, inst_macro_dict, inst_macro_res_dict, stressmark_inst_list)    
+    #
+    get_stressmark_inst_res( pruned_cov_dict, pruned_res_dict, inst_index_dict, inst_macro_dict, inst_macro_res_dict, stressmark_inst_list)    
     if(PRINT_INSTS):
         print("Print stressmark instructions")
         print(" ".join(stressmark_inst_list))
